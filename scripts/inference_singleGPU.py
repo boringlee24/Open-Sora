@@ -11,7 +11,10 @@ from opensora.models.text_encoder.t5 import text_preprocessing
 from opensora.registry import MODELS, SCHEDULERS, build_module
 from opensora.utils.config_utils import parse_configs
 from opensora.utils.misc import to_torch_dtype
-
+from carbontracker.tracker import CarbonTrackerManual
+import time
+import json
+from pathlib import Path
 
 def main():
     # ======================================================
@@ -95,6 +98,13 @@ def main():
     save_dir = cfg.save_dir
     os.makedirs(save_dir, exist_ok=True)
 
+    tracker = CarbonTrackerManual(epochs=1, monitor_epochs=1, update_interval=0.01,
+        components='gpu', epochs_before_pred=1, verbose=0)
+    tracker.tracker.pue_manual=1
+    tracker.intensity_updater.ci_manual = 100
+    time.sleep(5) # give it some cushion to initialize measurement
+    info = {"energy": [], "co2": [], "time": []}
+
     # 4.1. batch generation
     for i in range(0, len(prompts), cfg.batch_size):
         # 4.2 sample in hidden space
@@ -130,8 +140,14 @@ def main():
                     continue
 
             # sampling
+            
+            ### start of carbon tracker ###
+            tracker.epoch_start()
+
             z = torch.randn(len(batch_prompts), vae.out_channels, *latent_size, device=device, dtype=dtype)
-            samples = scheduler.sample(
+            # diffusion denoising happens in latent space
+            # first generate text embedding, then perform iterative diffusion sampling
+            samples = scheduler.sample( 
                 model,
                 text_encoder,
                 z=z,
@@ -139,7 +155,13 @@ def main():
                 device=device,
                 additional_args=model_args,
             )
-            samples = vae.decode(samples.to(dtype))
+            samples = vae.decode(samples.to(dtype)) # convert from latent space to specified resolution
+
+            ### end of carbon tracker ###
+            energy, co2, duration = tracker.epoch_end('')
+            info["energy"].append(energy)
+            info["co2"].append(co2)
+            info["time"].append(duration)
 
             for idx, sample in enumerate(samples):
                 print(f"Prompt: {batch_prompts_raw[idx]}")
@@ -153,6 +175,13 @@ def main():
                 save_sample(sample, fps=cfg.fps // cfg.frame_interval, save_path=save_path)
                 sample_idx += 1
 
+    prompt_file_name = cfg.prompt_path.split("/")[-1].split(".")[0]
+    logging_dir = f"data/{prompt_file_name}_sample_{cfg.num_sample}"
+    logging_file = f"batch_{cfg.batch_size}_steps_{cfg['scheduler']['num_sampling_steps']}_frames_{cfg.num_frames}_reso_{cfg.image_size[0]}x{cfg.image_size[1]}.json"
+    Path(logging_dir).mkdir(parents=True, exist_ok=True)
+
+    with open(f"{logging_dir}/{logging_file}.json", "w") as f:
+        json.dump(info, f, indent=4)
 
 if __name__ == "__main__":
     main()

@@ -24,7 +24,9 @@
                 "--num-frames",
                 "16",
                 "--batch-size",
-                "1"
+                "1",
+                // "--num-sampling-steps",
+                // "50",
             ],
         }
     ]
