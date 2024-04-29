@@ -17,7 +17,7 @@
                 "--ckpt-path",
                 "/work/li.baol/GIT/Open-Sora/scripts/OpenSora-STDiT-v2-stage3/model.safetensors",
                 "--prompt-path",
-                "/work/li.baol/GIT/Open-Sora/assets/texts/test2.txt",
+                "/work/li.baol/GIT/Open-Sora/assets/texts/char.txt",
                 "--image-size",
                 "240",
                 "426",
