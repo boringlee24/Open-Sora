@@ -177,7 +177,7 @@ def main():
 
     prompt_file_name = cfg.prompt_path.split("/")[-1].split(".")[0]
     logging_dir = f"data/{prompt_file_name}_sample_{cfg.num_sample}"
-    logging_file = f"batch_{cfg.batch_size}_steps_{cfg['scheduler']['num_sampling_steps']}_frames_{cfg.num_frames}_reso_{cfg.image_size[0]}x{cfg.image_size[1]}.json"
+    logging_file = f"batch_{cfg.batch_size}_steps_{cfg['scheduler']['num_sampling_steps']}_frames_{cfg.num_frames}_reso_{cfg.image_size[0]}x{cfg.image_size[1]}"
     Path(logging_dir).mkdir(parents=True, exist_ok=True)
 
     with open(f"{logging_dir}/{logging_file}.json", "w") as f:
