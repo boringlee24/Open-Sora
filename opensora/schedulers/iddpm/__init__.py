@@ -7,7 +7,7 @@ from opensora.registry import SCHEDULERS
 from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
 from .speed import SpeeDiffusion
-
+import time
 
 @SCHEDULERS.register_module("iddpm")
 class IDDPM(SpacedDiffusion):
@@ -85,6 +85,42 @@ class IDDPM(SpacedDiffusion):
         samples, _ = samples.chunk(2, dim=0)
         return samples
 
+    def sample_profiling(
+        self,
+        model,
+        text_encoder,
+        z,
+        prompts,
+        device,
+        additional_args=None,
+        mask=None,
+    ):
+        n = len(prompts)
+        z = torch.cat([z, z], 0)
+        time_encode_start = time.perf_counter()
+        model_args = text_encoder.encode(prompts)
+        y_null = text_encoder.null(n)
+        model_args["y"] = torch.cat([model_args["y"], y_null], 0) # text embedding
+        if additional_args is not None:
+            model_args.update(additional_args)
+        time_encode_end = time.perf_counter()
+        
+        forward = partial(forward_with_cfg, model, cfg_scale=self.cfg_scale, cfg_channel=self.cfg_channel)
+        samples = self.p_sample_loop(
+            forward,
+            z.shape,
+            z,
+            clip_denoised=False,
+            model_kwargs=model_args,
+            progress=True,
+            device=device,
+            mask=mask,
+        )
+        samples, _ = samples.chunk(2, dim=0)
+        time_denoise_end = time.perf_counter()
+        time_encode_ms = (time_encode_end - time_encode_start) * 1000
+        time_denoise_ms = (time_denoise_end - time_encode_end) * 1000
+        return samples, time_encode_ms, time_denoise_ms
 
 def forward_with_cfg(model, x, timestep, y, cfg_scale, cfg_channel=None, **kwargs):
     # https://github.com/openai/glide-text2im/blob/main/notebooks/text2im.ipynb
